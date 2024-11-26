@@ -1,37 +1,113 @@
-name: SonarQube Cloud
+name: SonarQube Analysis
+
 on:
   push:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:  # Allows manual trigger of the workflow
+
 jobs:
-  build:
-    name: Build and analyze
+  build-and-analyze:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - name: Set up JDK 17
+      # Step 1: Checkout the code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Java 22
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          java-version: 17
-          distribution: 'zulu' # Alternative distribution options are available.
-      - name: Cache SonarQube Cloud packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-      - name: Build and analyze
+          java-version: '22'
+          distribution: 'temurin'
+
+      # Step 3: Install Maven
+      - name: Install Maven
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y maven
+
+      # Step 4: Install dependencies
+      - name: Install Dependencies
+        run: mvn clean install -DskipTests
+
+      # Step 5: Run SonarQube Analysis
+      - name: SonarCloud Analysis
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_HOST_URL: https://sonarcloud.io
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=arperkata_mavenSonar
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=mavenSonar \
+            -Dsonar.organization=arperkata \
+            -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+      # Step 6: Fetch SonarCloud Metrics and Issues
+      - name: Fetch SonarCloud Metrics and Issues
+        run: |
+          curl -u ${{ secrets.SONAR_TOKEN }}: "https://sonarcloud.io/api/measures/component?componentKey=arperkata_mavenSonar&metricKeys=bugs,vulnerabilities,code_smells,coverage" > sonar-metrics.json
+          curl -u ${{ secrets.SONAR_TOKEN }}: "https://sonarcloud.io/api/issues/search?componentKeys=arperkata_mavenSonar&resolved=false" > sonar-issues.json
+          cat sonar-metrics.json
+          cat sonar-issues.json
+
+      # Step 7: Generate a Report (HTML or CSV)
+      - name: Generate Sonar Report
+        run: |
+          npm install axios
+          echo "Generating SonarQube Report..."
+          node -e "
+          const fs = require('fs');
+          const metrics = require('./sonar-metrics.json');
+          const issues = require('./sonar-issues.json');
+          const timestamp = new Date().toLocaleString();
+          let report = '<html><head><title>SonarQube Report</title>';
+          report += '<style>body { font-family: Arial, sans-serif; margin: 20px; }';
+          report += 'h1, h2 { color: #2c3e50; }';
+          report += 'table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }';
+          report += 'th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }';
+          report += 'th { background-color: #f4f4f4; }';
+          report += '.severity-MINOR { color: #2980b9; }';
+          report += '.severity-MAJOR { color: #e67e22; }';
+          report += '.severity-BLOCKER { color: #e74c3c; font-weight: bold; }</style></head><body>';
+          report += '<h1>SonarQube Analysis Report</h1>';
+          report += \`<p><strong>Generated on:</strong> \${timestamp}</p>\`;
+          if (metrics && metrics.component && metrics.component.measures) {
+            report += '<h2>Metrics</h2><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>';
+            metrics.component.measures.forEach(measure => {
+              report += \`<tr><td>\${measure.metric}</td><td>\${measure.value}</td></tr>\`;
+            });
+            report += '</tbody></table>';
+          } else {
+            report += '<h2>No Metrics Available</h2><p>Metrics data is missing or malformed.</p>';
+          }
+          if (issues && issues.issues && issues.issues.length > 0) {
+            report += '<h2>Unresolved Issues</h2><table><thead><tr><th>Severity</th><th>Message</th><th>File</th></tr></thead><tbody>';
+            issues.issues.forEach(issue => {
+              const severityClass = \`severity-\${issue.severity}\`;
+              report += \`<tr><td class="\${severityClass}">\${issue.severity}</td><td>\${issue.message}</td><td>\${issue.component}</td></tr>\`;
+            });
+            report += '</tbody></table>';
+          } else {
+            report += '<h2>No Unresolved Issues</h2><p>No unresolved issues found.</p>';
+          }
+          report += '</body></html>';
+          fs.writeFileSync('sonar-report.html', report);
+          console.log('Report generated: sonar-report.html');
+          "
+          # Add a timestamp to the report to ensure a unique name
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          mv sonar-report.html sonar-report-${TIMESTAMP}.html
+          
+          
+          # Move the renamed file to the desired destination (or workspace)
+          #mv sonar-report-${TIMESTAMP}.html $GITHUB_WORKSPACE/sonar-report-${TIMESTAMP}.html
+
+      # Step 8: Upload the Report
+      - name: Upload Sonar Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-report
+          path: sonar-report-*.html
