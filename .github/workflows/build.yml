@@ -37,19 +37,19 @@ jobs:
       - name: SonarCloud Analysis
         env:
           SONAR_HOST_URL: https://sonarcloud.io
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: a4259ed197fe341c41ae701504c1de23c96a33da
         run: |
           mvn clean verify sonar:sonar \
             -Dsonar.projectKey=mavenSonar \
             -Dsonar.organization=arperkata \
             -Dsonar.host.url= https://sonarcloud.io \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.login=a4259ed197fe341c41ae701504c1de23c96a33da
 
       # Step 6: Fetch SonarCloud Metrics and Issues
       - name: Fetch SonarCloud Metrics and Issues
         run: |
-          curl -u ${{ secrets.SONAR_TOKEN }}: "https://sonarcloud.io/api/measures/component?componentKey=arperkata_mavenSonar&metricKeys=bugs,vulnerabilities,code_smells,coverage" > sonar-metrics.json
-          curl -u ${{ secrets.SONAR_TOKEN }}: "https://sonarcloud.io/api/issues/search?componentKeys=arperkata_mavenSonar&resolved=false" > sonar-issues.json
+          curl -u a4259ed197fe341c41ae701504c1de23c96a33da: "https://sonarcloud.io/api/measures/component?componentKey=arperkata_mavenSonar&metricKeys=bugs,vulnerabilities,code_smells,coverage" > sonar-metrics.json
+          curl -u a4259ed197fe341c41ae701504c1de23c96a33da: "https://sonarcloud.io/api/issues/search?componentKeys=arperkata_mavenSonar&resolved=false" > sonar-issues.json
           cat sonar-metrics.json
           cat sonar-issues.json
 
