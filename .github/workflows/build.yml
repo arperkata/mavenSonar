@@ -42,7 +42,7 @@ jobs:
           mvn clean verify sonar:sonar \
             -Dsonar.projectKey=mavenSonar \
             -Dsonar.organization=arperkata \
-            -Dsonar.host.url= https://sonarcloud.io \
+            -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.login=a4259ed197fe341c41ae701504c1de23c96a33da
 
       # Step 6: Fetch SonarCloud Metrics and Issues
